@@ -1,2 +1,2 @@
 # asyncmetrics
-Send metrics to Graphite asynchronous from your asyncio application
+Send metrics to Graphite asynchronously from your asyncio application
