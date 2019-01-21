@@ -1,17 +1,17 @@
 from asyncio import iscoroutinefunction
 from functools import wraps
 from time import time as time_
-from typing import Optional, Callable
+from typing import Callable, Optional
 
-from .graphite import get_graphite, Graphite
+from .graphite import Graphite, get_graphite
 
 __all__ = [
-    'Metric',
-    'MaxMetric',
-    'MinMetric',
     'AvgMetric',
-    'SumMetric',
     'CountMetric',
+    'MaxMetric',
+    'Metric',
+    'MinMetric',
+    'SumMetric',
     'count',
     'time',
 ]

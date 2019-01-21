@@ -1,8 +1,9 @@
-from asyncio import Queue, get_event_loop
+from asyncio import CancelledError, LifoQueue, sleep
+from logging import getLogger
 from time import time
 from typing import Optional
 
-from aiographite import AIOGraphite, connect
+from aiographite.aiographite import AIOGraphite, AioGraphiteSendException, connect
 
 __all__ = [
     'Graphite',
@@ -12,31 +13,54 @@ __all__ = [
 
 _graphite = None
 
+logger = getLogger(__package__)
+
 
 class Graphite:
     def __init__(self, conn: AIOGraphite):
         self._conn = conn
-        self._queue = Queue()
-        self._sender_task = get_event_loop().create_task(self._sender())
+        self._queue = LifoQueue()
+        self._sender_task = conn.loop.create_task(self._sender())
         self._running = True
 
     async def _sender(self):
         queue = self._queue
+        fail = None
 
-        while True:
-            metrics = [await queue.get()]
+        while self._running:
+            try:
+                if fail:
+                    logger.error("%s Sleeping for 60 seconds.", fail)
+                    await sleep(60)
+
+                metrics = [await queue.get()]
+            except CancelledError:
+                metrics = []
 
             while not queue.empty():
                 metrics.append(queue.get_nowait())
 
-            await self._conn.send_multiple(metrics)
+            try:
+                await self._conn.send_multiple(metrics)
+            except AioGraphiteSendException as exc:
+                for metric in metrics:
+                    queue.put_nowait(metric)
 
-            if not self._running:
-                break
+                fail = exc
+            else:
+                fail = None
 
     async def close(self):
         self._running = False
-        await self._sender_task
+        self._sender_task.cancel()
+
+        try:
+            await self._sender_task
+        except CancelledError:
+            pass
+        except Exception as exc:
+            logger.error("Error at %s sender task: %s", self.__class__.__name__, exc, exc_info=exc)
+
         await self._conn.close()
 
     def send(self, metric: str, value: int, timestamp: Optional[int] = None):
@@ -61,4 +85,5 @@ def get_graphite() -> Graphite:
     if _graphite is None:
         raise RuntimeError("asyncmetrics must be set up before sending metrics")
 
+    # noinspection PyTypeChecker
     return _graphite
