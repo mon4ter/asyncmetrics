@@ -17,38 +17,46 @@ __all__ = [
 ]
 
 
-class Metric:
-    def __init__(self, path: str, *, graphite: Graphite = None):
-        self._metric = None
+class MetricMeta(type):
+    def __new__(mcs, name, bases, namespace):
+        prefix = namespace.pop('prefix', 'notset')
+        klass = super().__new__(mcs, name, bases, namespace)
 
-        self._path = path
+        if prefix != 'notset':
+            klass.prefix = prefix
+
+        return klass
+
+    @property
+    def prefix(self) -> str:
+        return getattr(self, '_prefix', '')
+
+    @prefix.setter
+    def prefix(self, value: str):
+        setattr(self, '_prefix', value)
+
+
+class Metric(metaclass=MetricMeta):
+    def __init__(self, metric: str, *, graphite: Graphite = None):
+        self._metric = metric
         self._graphite = graphite
-        self._prefixes = []
-        self._suffixes = []
 
     @property
     def metric(self) -> str:
-        if self._metric is None:
-            self._metric = '.'.join(p for p in (
-                '.'.join(p for p in self._prefixes if p),
-                self._path,
-                '.'.join(s for s in self._suffixes if s)
-            ) if p)
-
-        return self._metric
+        return '.'.join(x for x in (type(self).prefix, self._metric) if x)
 
     def send(self, value: int, timestamp: Optional[int] = None):
         graphite = self._graphite or get_graphite()
         graphite.send(self.metric, value, timestamp)
 
-    def count(self, func) -> Callable:
+    def count(self, func: Callable) -> Callable:
         @wraps(func)
         def deco(*args, **kwargs):
             self.send(1)
             return func(*args, **kwargs)
         return deco
 
-    def time(self, func) -> Callable:
+    def time(self, func: Callable) -> Callable:
         if iscoroutinefunction(func):
             @wraps(func)
             async def deco(*args, **kwargs):
@@ -63,43 +71,42 @@ class Metric:
                 ret = func(*args, **kwargs)
                 self.send(int(round(time_() - start, 6) * 1000000))
                 return ret
-
         return deco
 
 
 class MaxMetric(Metric):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._suffixes.append('max')
+    @property
+    def metric(self) -> str:
+        return super().metric + '.max'
 
 
 class MinMetric(Metric):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._suffixes.append('min')
+    @property
+    def metric(self) -> str:
+        return super().metric + '.min'
 
 
 class AvgMetric(Metric):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._suffixes.append('avg')
+    @property
+    def metric(self) -> str:
+        return super().metric + '.avg'
 
 
 class SumMetric(Metric):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._suffixes.append('sum')
+    @property
+    def metric(self) -> str:
+        return super().metric + '.sum'
 
 
 class CountMetric(Metric):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._suffixes.append('count')
+    @property
+    def metric(self) -> str:
+        return super().metric + '.count'
 
 
-def count(metric: str) -> Callable:
-    return Metric(metric).count
+def count(metric: str, *, klass: MetricMeta = CountMetric) -> Callable[[Callable], Callable]:
+    return klass(metric).count
 
 
-def time(metric: str) -> Callable:
-    return Metric(metric).time
+def time(metric: str, *, klass: MetricMeta = Metric) -> Callable[[Callable], Callable]:
+    return klass(metric).time

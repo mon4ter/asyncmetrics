@@ -1,4 +1,4 @@
-from asyncio import CancelledError, LifoQueue, sleep
+from asyncio import CancelledError, Queue, sleep
 from logging import getLogger
 from time import time
 from typing import Optional
@@ -17,9 +17,13 @@ logger = getLogger(__package__)
 
 
 class Graphite:
+    @classmethod
+    async def connect(cls, *args, **kwargs):
+        return cls(await connect(*args, **kwargs))
+
     def __init__(self, conn: AIOGraphite):
         self._conn = conn
-        self._queue = LifoQueue()
+        self._queue = Queue()
         self._sender_task = conn.loop.create_task(self._sender())
         self._running = True
 
@@ -76,8 +80,7 @@ async def setup(*args, **kwargs) -> Graphite:
     if _graphite is not None:
         raise RuntimeError("asyncmetrics must be set up only once")
 
-    conn = await connect(*args, **kwargs)
-    _graphite = Graphite(conn)
+    _graphite = await Graphite.connect(*args, **kwargs)
     return _graphite
 
 
