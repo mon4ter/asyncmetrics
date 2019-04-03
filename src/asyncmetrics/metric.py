@@ -1,21 +1,11 @@
 from asyncio import iscoroutinefunction
 from functools import wraps
 from time import time as time_
-from typing import Callable, Optional, Union
+from typing import Callable, Generator, Optional, Union
 
 from .graphite import Graphite
 
 __all__ = [
-    'AvgMetric',
-    'CountMetric',
-    'MaxMetric',
-    'Metric',
-    'MinMetric',
-    'MsMetric',
-    'NsMetric',
-    'SumMetric',
-    'TimeMetric',
-    'UsMetric',
     'count',
     'time',
 ]
@@ -145,6 +135,22 @@ class NsMetric(TimeMetric):
         return super().metric + '.ns'
 
 
+for time_class in TimeMetric.__subclasses__():
+    for agg_class in [MaxMetric, MinMetric, AvgMetric, SumMetric]:
+        name_ = '{}{}'.format(agg_class.__name__.replace('Metric', ''), time_class.__name__)
+        globals()[name_] = type(name_, (agg_class, time_class), {})
+
+
+def _recursive_subclasses(cls: type) -> Generator[type, None, None]:
+    yield cls
+
+    for klass in cls.__subclasses__():
+        yield from _recursive_subclasses(klass)
+
+
+__all__.extend(c.__name__ for c in _recursive_subclasses(Metric))
+
+
 def count(func: Union[Callable, str], *, klass: MetricMeta = CountMetric) -> Callable[[Callable], Callable]:
     if isinstance(func, Callable):
         return klass('{}.{}'.format(func.__module__, func.__qualname__)).count(func)
@@ -152,7 +158,7 @@ def count(func: Union[Callable, str], *, klass: MetricMeta = CountMetric) -> Cal
         return klass(func).count
 
 
-def time(func: Union[Callable, str], *, klass: MetricMeta = UsMetric) -> Callable[[Callable], Callable]:
+def time(func: Union[Callable, str], *, klass: MetricMeta = AvgUsMetric) -> Callable[[Callable], Callable]:
     if isinstance(func, Callable):
         return klass('{}.{}'.format(func.__module__, func.__qualname__)).time(func)
     else:

@@ -9,8 +9,6 @@ __all__ = [
     'Graphite',
 ]
 
-_graphite = None
-
 logger = getLogger(__package__)
 
 
