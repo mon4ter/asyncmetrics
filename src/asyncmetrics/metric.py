@@ -31,20 +31,36 @@ class MetricMeta(type):
 
     @graphite.setter
     def graphite(cls, value: Graphite):
-        if isinstance(value, Graphite):
-            setattr(cls, '_graphite', value)
+        if not isinstance(value, Graphite):
+            raise TypeError("graphite must be Graphite, not {}", type(value).__name__)
+
+        setattr(cls, '_graphite', value)
 
     @property
-    def prefix(self) -> str:
-        return getattr(self, '_prefix', '')
+    def prefix(cls) -> str:
+        return getattr(cls, '_prefix', '')
 
     @prefix.setter
-    def prefix(self, value: str):
-        setattr(self, '_prefix', str(value))
+    def prefix(cls, value: str):
+        if not isinstance(value, str):
+            raise TypeError("prefix must be str, not {}", type(value).__name__)
+
+        setattr(cls, '_prefix', value)
+
+    @prefix.deleter
+    def prefix(cls):
+        if hasattr(cls, '_prefix'):
+            delattr(cls, '_prefix')
 
 
 class Metric(metaclass=MetricMeta):
-    def __init__(self, metric: str, *, graphite: Graphite = None):
+    def __init__(self, metric: str, *, graphite: Optional[Graphite] = None):
+        if not isinstance(metric, str):
+            raise TypeError("metric must be str, not {}", type(metric).__name__)
+
+        if graphite and not isinstance(graphite, Graphite):
+            raise TypeError("graphite must be Graphite, not {}", type(graphite).__name__)
+
         self._metric = metric
         self._graphite = graphite
 
@@ -158,7 +174,7 @@ def count(func: Union[Callable, str], *, klass: MetricMeta = CountMetric) -> Cal
         return klass(func).count
 
 
-def time(func: Union[Callable, str], *, klass: MetricMeta = AvgUsMetric) -> Callable[[Callable], Callable]:
+def time(func: Union[Callable, str], *, klass: MetricMeta = UsMetric) -> Callable[[Callable], Callable]:
     if isinstance(func, Callable):
         return klass('{}.{}'.format(func.__module__, func.__qualname__)).time(func)
     else:
