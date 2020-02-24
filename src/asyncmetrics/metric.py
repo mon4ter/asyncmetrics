@@ -1,6 +1,6 @@
 from asyncio import iscoroutinefunction
 from functools import wraps
-from time import time as time_
+from time import monotonic
 from typing import Callable, Generator, Optional, Union
 
 from .graphite import Graphite
@@ -15,15 +15,17 @@ class MetricMeta(type):
     def __new__(mcs, name, bases, namespace):
         graphite = namespace.pop('graphite', None)
         prefix = namespace.pop('prefix', None)
-        klass = super().__new__(mcs, name, bases, namespace)
+        cls = super().__new__(mcs, name, bases, namespace)
 
         if graphite:
-            klass.graphite = graphite
+            # TODO Test graphite in namespace
+            cls.graphite = graphite
 
         if prefix:
-            klass.prefix = prefix
+            # TODO Test prefix in namespace
+            cls.prefix = prefix
 
-        return klass
+        return cls
 
     @property
     def graphite(cls) -> Graphite:
@@ -69,10 +71,12 @@ class Metric(metaclass=MetricMeta):
         return '.'.join(x for x in (type(self).prefix, self._metric) if x)
 
     def send(self, value: int, timestamp: Optional[int] = None):
+        # TODO Test send
         graphite = self._graphite or type(self).graphite
         graphite.send(self.metric, value, timestamp)
 
     def count(self, func: Callable) -> Callable:
+        # TODO Test metric count
         @wraps(func)
         def deco(*args, **kwargs):
             self.send(1)
@@ -80,23 +84,25 @@ class Metric(metaclass=MetricMeta):
         return deco
 
     def time(self, func: Callable) -> Callable:
+        # TODO Test metric time
         if iscoroutinefunction(func):
             @wraps(func)
             async def deco(*args, **kwargs):
-                start = time_()
+                start = monotonic()
                 ret = await func(*args, **kwargs)
-                self.send(int(round(time_() - start, 6) * 1000000))
+                self.send(int(round(monotonic() - start, 6) * 1000000))
                 return ret
         else:
             @wraps(func)
             def deco(*args, **kwargs):
-                start = time_()
+                start = monotonic()
                 ret = func(*args, **kwargs)
-                self.send(int(round(time_() - start, 6) * 1000000))
+                self.send(int(round(monotonic() - start, 6) * 1000000))
                 return ret
         return deco
 
 
+# TODO Test all Metric subclasses
 class MaxMetric(Metric):
     @property
     def metric(self) -> str:
@@ -167,6 +173,7 @@ def _recursive_subclasses(cls: type) -> Generator[type, None, None]:
 __all__.extend(c.__name__ for c in _recursive_subclasses(Metric))
 
 
+# TODO Test count
 def count(func: Union[Callable, str], *, klass: MetricMeta = CountMetric) -> Callable[[Callable], Callable]:
     if isinstance(func, Callable):
         return klass('{}.{}'.format(func.__module__, func.__qualname__)).count(func)
@@ -174,6 +181,7 @@ def count(func: Union[Callable, str], *, klass: MetricMeta = CountMetric) -> Cal
         return klass(func).count
 
 
+# TODO Test time
 def time(func: Union[Callable, str], *, klass: MetricMeta = UsMetric) -> Callable[[Callable], Callable]:
     if isinstance(func, Callable):
         return klass('{}.{}'.format(func.__module__, func.__qualname__)).time(func)

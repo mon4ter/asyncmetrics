@@ -1,4 +1,4 @@
-from asyncio import CancelledError, Queue, sleep
+from asyncio import CancelledError, Queue, ensure_future, sleep
 from logging import getLogger
 from time import time
 from typing import Optional
@@ -12,6 +12,7 @@ __all__ = [
 logger = getLogger(__package__)
 
 
+# TODO Test Graphite
 class Graphite:
     DEFAULT_LIMIT = 1000000
 
@@ -23,7 +24,7 @@ class Graphite:
     def __init__(self, conn: AIOGraphite, *, limit: Optional[int] = None):
         self._conn = conn
         self._queue = Queue()
-        self._sender_task = conn.loop.create_task(self._sender())
+        self._sender_task = ensure_future(self._sender())
         self._running = True
         self._limit = limit or self.DEFAULT_LIMIT
 
