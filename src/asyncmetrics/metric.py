@@ -1,28 +1,47 @@
 from asyncio import iscoroutinefunction
 from functools import wraps
 from time import monotonic
-from typing import Callable, Generator, Optional, Union
+from typing import Callable, Optional, Union
 
 from .graphite import Graphite
 
 __all__ = [
+    'AvgMetric',
+    'AvgMsMetric',
+    'AvgNsMetric',
+    'AvgUsMetric',
+    'CountMetric',
+    'MaxMetric',
+    'MaxMsMetric',
+    'MaxNsMetric',
+    'MaxUsMetric',
+    'Metric',
+    'MinMetric',
+    'MinMsMetric',
+    'MinNsMetric',
+    'MinUsMetric',
+    'MsMetric',
+    'NsMetric',
+    'SumMetric',
+    'SumMsMetric',
+    'SumNsMetric',
+    'SumUsMetric',
+    'UsMetric',
     'count',
     'time',
 ]
 
 
-class MetricMeta(type):
+class _MetricMeta(type):
     def __new__(mcs, name, bases, namespace):
         graphite = namespace.pop('graphite', None)
         prefix = namespace.pop('prefix', None)
         cls = super().__new__(mcs, name, bases, namespace)
 
         if graphite:
-            # TODO Test graphite in namespace
             cls.graphite = graphite
 
         if prefix:
-            # TODO Test prefix in namespace
             cls.prefix = prefix
 
         return cls
@@ -55,7 +74,7 @@ class MetricMeta(type):
             delattr(cls, '_prefix')
 
 
-class Metric(metaclass=MetricMeta):
+class Metric(metaclass=_MetricMeta):
     def __init__(self, metric: str, *, graphite: Optional[Graphite] = None):
         if not isinstance(metric, str):
             raise TypeError("metric must be str, not {}", type(metric).__name__)
@@ -71,12 +90,10 @@ class Metric(metaclass=MetricMeta):
         return '.'.join(x for x in (type(self).prefix, self._metric) if x)
 
     def send(self, value: int, timestamp: Optional[int] = None):
-        # TODO Test send
         graphite = self._graphite or type(self).graphite
         graphite.send(self.metric, value, timestamp)
 
     def count(self, func: Callable) -> Callable:
-        # TODO Test metric count
         @wraps(func)
         def deco(*args, **kwargs):
             self.send(1)
@@ -84,7 +101,6 @@ class Metric(metaclass=MetricMeta):
         return deco
 
     def time(self, func: Callable) -> Callable:
-        # TODO Test metric time
         if iscoroutinefunction(func):
             @wraps(func)
             async def deco(*args, **kwargs):
@@ -102,7 +118,6 @@ class Metric(metaclass=MetricMeta):
         return deco
 
 
-# TODO Test all Metric subclasses
 class MaxMetric(Metric):
     @property
     def metric(self) -> str:
@@ -133,56 +148,86 @@ class CountMetric(Metric):
         return super().metric + '.count'
 
 
-class TimeMetric(Metric):
+class _TimeMetric(Metric):
     @property
     def metric(self) -> str:
         return super().metric + '.time'
 
 
-class MsMetric(TimeMetric):
+class MsMetric(_TimeMetric):
     @property
     def metric(self) -> str:
         return super().metric + '.ms'
 
 
-class UsMetric(TimeMetric):
+class UsMetric(_TimeMetric):
     @property
     def metric(self) -> str:
         return super().metric + '.us'
 
 
-class NsMetric(TimeMetric):
+class NsMetric(_TimeMetric):
     @property
     def metric(self) -> str:
         return super().metric + '.ns'
 
 
-for time_class in TimeMetric.__subclasses__():
-    for agg_class in [MaxMetric, MinMetric, AvgMetric, SumMetric]:
-        name_ = '{}{}'.format(agg_class.__name__.replace('Metric', ''), time_class.__name__)
-        globals()[name_] = type(name_, (agg_class, time_class), {})
+class MaxMsMetric(MsMetric, MaxMetric):
+    pass
 
 
-def _recursive_subclasses(cls: type) -> Generator[type, None, None]:
-    yield cls
-
-    for klass in cls.__subclasses__():
-        yield from _recursive_subclasses(klass)
+class MinMsMetric(MsMetric, MinMetric):
+    pass
 
 
-__all__.extend(c.__name__ for c in _recursive_subclasses(Metric))
+class AvgMsMetric(MsMetric, AvgMetric):
+    pass
 
 
-# TODO Test count
-def count(func: Union[Callable, str], *, klass: MetricMeta = CountMetric) -> Callable[[Callable], Callable]:
+class SumMsMetric(MsMetric, SumMetric):
+    pass
+
+
+class MaxUsMetric(UsMetric, MaxMetric):
+    pass
+
+
+class MinUsMetric(UsMetric, MinMetric):
+    pass
+
+
+class AvgUsMetric(UsMetric, AvgMetric):
+    pass
+
+
+class SumUsMetric(UsMetric, SumMetric):
+    pass
+
+
+class MaxNsMetric(NsMetric, MaxMetric):
+    pass
+
+
+class MinNsMetric(NsMetric, MinMetric):
+    pass
+
+
+class AvgNsMetric(NsMetric, AvgMetric):
+    pass
+
+
+class SumNsMetric(NsMetric, SumMetric):
+    pass
+
+
+def count(func: Union[Callable, str], *, klass: _MetricMeta = CountMetric) -> Callable[[Callable], Callable]:
     if isinstance(func, Callable):
         return klass('{}.{}'.format(func.__module__, func.__qualname__)).count(func)
     else:
         return klass(func).count
 
 
-# TODO Test time
-def time(func: Union[Callable, str], *, klass: MetricMeta = UsMetric) -> Callable[[Callable], Callable]:
+def time(func: Union[Callable, str], *, klass: _MetricMeta = UsMetric) -> Callable[[Callable], Callable]:
     if isinstance(func, Callable):
         return klass('{}.{}'.format(func.__module__, func.__qualname__)).time(func)
     else:
