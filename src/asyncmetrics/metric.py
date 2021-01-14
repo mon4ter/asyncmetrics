@@ -89,6 +89,16 @@ class Metric(metaclass=_MetricMeta):
     def metric(self) -> str:
         return '.'.join(x for x in (type(self).prefix, self._metric) if x)
 
+    def _calculate_time(self, start: float, stop: float) -> int:
+        if isinstance(self, MsMetric):
+            threshold = 3
+        elif isinstance(self, UsMetric):
+            threshold = 6
+        else:
+            threshold = 9
+
+        return int(round(stop - start, threshold) * 10 ** threshold)
+
     def send(self, value: int, timestamp: Optional[int] = None):
         graphite = self._graphite or type(self).graphite
         graphite.send(self.metric, value, timestamp)
@@ -106,14 +116,16 @@ class Metric(metaclass=_MetricMeta):
             async def deco(*args, **kwargs):
                 start = monotonic()
                 ret = await func(*args, **kwargs)
-                self.send(int(round(monotonic() - start, 6) * 1000000))
+                stop = monotonic()
+                self.send(self._calculate_time(start, stop))
                 return ret
         else:
             @wraps(func)
             def deco(*args, **kwargs):
                 start = monotonic()
                 ret = func(*args, **kwargs)
-                self.send(int(round(monotonic() - start, 6) * 1000000))
+                stop = monotonic()
+                self.send(self._calculate_time(start, stop))
                 return ret
         return deco
 
@@ -227,7 +239,7 @@ def count(func: Union[Callable, str], *, klass: _MetricMeta = CountMetric) -> Ca
         return klass(func).count
 
 
-def time(func: Union[Callable, str], *, klass: _MetricMeta = UsMetric) -> Callable[[Callable], Callable]:
+def time(func: Union[Callable, str], *, klass: _MetricMeta = NsMetric) -> Callable[[Callable], Callable]:
     if isinstance(func, Callable):
         return klass('{}.{}'.format(func.__module__, func.__qualname__)).time(func)
     else:

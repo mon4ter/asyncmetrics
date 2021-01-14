@@ -188,7 +188,7 @@ def test_time():
     func()
     func()
 
-    assert all(m == 'test_time' and v // 1000 == 1 and t is None for m, v, t in graphite.sent)
+    assert all(m == 'test_time' and v // 1000000 == 1 and t is None for m, v, t in graphite.sent)
 
 
 @mark.asyncio
@@ -204,7 +204,7 @@ async def test_time_async():
     await func()
     await func()
 
-    assert all(m == 'test_time_async' and v // 1000 == 1 and t is None for m, v, t in graphite.sent)
+    assert all(m == 'test_time_async' and v // 1000000 == 1 and t is None for m, v, t in graphite.sent)
 
 
 def test_subclasses():
@@ -278,7 +278,7 @@ def test_bare_time():
     func()
 
     assert all(
-        m == 'test_metric.test_bare_time.<locals>.func.time.us' and v // 1000 == 1 and t is None
+        m == 'test_metric.test_bare_time.<locals>.func.time.ns' and v // 1000000 == 1 and t is None
         for m, v, t in Metric.graphite.sent
     )
 
@@ -295,6 +295,26 @@ def test_bare_time_named():
     func()
 
     assert all(
-        m == 'test_bare_time_named.time.us' and v // 1000 == 1 and t is None
+        m == 'test_bare_time_named.time.ns' and v // 1000000 == 1 and t is None
         for m, v, t in Metric.graphite.sent
     )
+
+
+def test_time_classes():
+    graphite = GraphiteMock('test_time_classes')
+    ms_metric = MsMetric('test_time_classes', graphite=graphite)
+    us_metric = UsMetric('test_time_classes', graphite=graphite)
+    ns_metric = NsMetric('test_time_classes', graphite=graphite)
+
+    @ms_metric.time
+    @us_metric.time
+    @ns_metric.time
+    def func():
+        sleep(.001)
+
+    func()
+
+    ns_data, us_data, ms_data = tuple(graphite.sent)
+    assert ms_data[0] == 'test_time_classes.time.ms' and ms_data[1] == 1
+    assert us_data[0] == 'test_time_classes.time.us' and us_data[1] // 1000 == 1
+    assert ns_data[0] == 'test_time_classes.time.ns' and ns_data[1] // 1000000 == 1
