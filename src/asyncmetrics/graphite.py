@@ -1,4 +1,4 @@
-from asyncio import CancelledError, Queue, ensure_future, sleep
+from asyncio import CancelledError, Queue, ensure_future, shield, sleep
 from logging import getLogger
 from time import time
 from typing import Optional
@@ -12,49 +12,54 @@ __all__ = [
 logger = getLogger(__package__)
 
 
-# TODO Test Graphite
 class Graphite:
-    DEFAULT_LIMIT = 1000000
-
-    @classmethod
-    async def connect(cls, *args, **kwargs) -> 'Graphite':
-        limit = kwargs.pop('limit', None)
-        return cls(await connect(*args, **kwargs), limit=limit)
-
-    def __init__(self, conn: AIOGraphite, *, limit: Optional[int] = None):
-        self._conn = conn
+    def __init__(self, host: str = '127.0.0.1', *args, queue_size: int = 1000000, flush_interval: float = 1., **kwargs):
+        self._conn = None
+        self._connect_args = (host, *args), kwargs
         self._queue = Queue()
         self._sender_task = ensure_future(self._sender())
         self._running = True
-        self._limit = limit or self.DEFAULT_LIMIT
+        self._queue_size = queue_size
+        self._flush_interval = flush_interval
+
+    async def _connect(self) -> AIOGraphite:
+        args, kwargs = self._connect_args
+        return await connect(*args, **kwargs)
 
     async def _sender(self):
+        conn = self._conn = await self._connect()
         queue = self._queue
+        flushing = False
         send_failed = False
 
-        while self._running:
+        while self._running or flushing:
+            metrics = []
+
             try:
                 if send_failed:
-                    logger.debug("Sleeping for 60 seconds.")
+                    # TODO Make seconds configurable
+                    logger.debug("Sleeping for 60 seconds")
                     await sleep(60)
+                else:
+                    await sleep(self._flush_interval)
 
-                metrics = [await queue.get()]
+                if not flushing:
+                    metrics.append(await queue.get())
             except CancelledError:
                 self._running = False
-                metrics = []
 
             while not queue.empty():
                 metrics.append(queue.get_nowait())
 
             metrics_len = len(metrics)
-            off_limit = metrics_len - self._limit
+            off_limit = metrics_len - self._queue_size
 
             if off_limit > 0:
-                logger.warning("Dropping %s metrics over the limit.", off_limit)
-                metrics = metrics[-self._limit:]
+                logger.warning("Dropping %s metrics over the limit", off_limit)
+                metrics = metrics[-self._queue_size:]
 
             try:
-                await self._conn.send_multiple(metrics)
+                await shield(conn.send_multiple(metrics))
             except AioGraphiteSendException as exc:
                 logger.error("%s", exc)
 
@@ -62,11 +67,15 @@ class Graphite:
                     queue.put_nowait(metric)
 
                 send_failed = True
+            except CancelledError:
+                self._running = False
+                flushing = True
             else:
                 if metrics_len:
-                    logger.debug("Sent %s metrics.", metrics_len)
+                    logger.debug("Sent %s metrics", metrics_len)
 
                 send_failed = False
+                flushing = False
 
     async def close(self):
         self._sender_task.cancel()
@@ -78,9 +87,14 @@ class Graphite:
         except Exception as exc:
             logger.error("Error at %s sender task: %s", self.__class__.__name__, exc, exc_info=exc)
 
-        await self._conn.close()
+        if self._conn:
+            await self._conn.close()
 
     def send(self, metric: str, value: int, timestamp: Optional[int] = None):
+        if not self._running:
+            logger.warning("Sender is not running, not sending")
+            return
+
         try:
             self._queue.put_nowait((str(metric), int(value), int(timestamp or time())))
         except ValueError as exc:

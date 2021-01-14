@@ -48,7 +48,13 @@ class _MetricMeta(type):
 
     @property
     def graphite(cls) -> Graphite:
-        return getattr(cls, '_graphite')
+        graphite = getattr(cls, '_graphite', None)
+
+        if not graphite:
+            graphite = Graphite()
+            setattr(cls, '_graphite', graphite)
+
+        return graphite
 
     @graphite.setter
     def graphite(cls, value: Graphite):

@@ -20,6 +20,12 @@ class GraphiteMock(Graphite):
         self.sent.append((metric, value, timestamp))
 
 
+@mark.asyncio
+async def test_default_graphite():
+    assert isinstance(Metric.graphite, Graphite)
+    await Metric.graphite.close()
+
+
 def test_metric():
     metric = 'test.metric'
     assert Metric(metric).metric == metric
@@ -33,7 +39,6 @@ def test_invalid_metric():
 
 def test_graphite():
     graphite = GraphiteMock('test_graphite')
-    # noinspection PyProtectedMember
     assert Metric('some', graphite=graphite)._graphite is graphite
 
 
@@ -188,7 +193,7 @@ def test_time():
     func()
     func()
 
-    assert all(m == 'test_time' and v // 1000000 == 1 and t is None for m, v, t in graphite.sent)
+    assert all(m == 'test_time' and 1 <= v // 1000000 <= 3 and t is None for m, v, t in graphite.sent)
 
 
 @mark.asyncio
@@ -204,7 +209,7 @@ async def test_time_async():
     await func()
     await func()
 
-    assert all(m == 'test_time_async' and v // 1000000 == 1 and t is None for m, v, t in graphite.sent)
+    assert all(m == 'test_time_async' and 1 <= v // 1000000 <= 3 and t is None for m, v, t in graphite.sent)
 
 
 def test_subclasses():
@@ -278,7 +283,7 @@ def test_bare_time():
     func()
 
     assert all(
-        m == 'test_metric.test_bare_time.<locals>.func.time.ns' and v // 1000000 == 1 and t is None
+        m == 'test_metric.test_bare_time.<locals>.func.time.ns' and 1 <= v // 1000000 <= 3 and t is None
         for m, v, t in Metric.graphite.sent
     )
 
@@ -295,7 +300,7 @@ def test_bare_time_named():
     func()
 
     assert all(
-        m == 'test_bare_time_named.time.ns' and v // 1000000 == 1 and t is None
+        m == 'test_bare_time_named.time.ns' and 1 <= v // 1000000 <= 3 and t is None
         for m, v, t in Metric.graphite.sent
     )
 
@@ -315,6 +320,6 @@ def test_time_classes():
     func()
 
     ns_data, us_data, ms_data = tuple(graphite.sent)
-    assert ms_data[0] == 'test_time_classes.time.ms' and ms_data[1] == 1
-    assert us_data[0] == 'test_time_classes.time.us' and us_data[1] // 1000 == 1
-    assert ns_data[0] == 'test_time_classes.time.ns' and ns_data[1] // 1000000 == 1
+    assert ms_data[0] == 'test_time_classes.time.ms' and 1 <= ms_data[1] <= 3
+    assert us_data[0] == 'test_time_classes.time.us' and 1 <= us_data[1] // 1000 <= 3
+    assert ns_data[0] == 'test_time_classes.time.ns' and 1 <= ns_data[1] // 1000000 <= 3
