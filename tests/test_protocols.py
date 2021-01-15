@@ -1,10 +1,11 @@
 from asyncio import DatagramProtocol, StreamReader, get_event_loop, sleep, start_server
+from gzip import decompress
 from random import randint
 from typing import Tuple
 
 from pytest import mark, raises
 
-from asyncmetrics import PlainTcp, PlainUdp, ProtocolError
+from asyncmetrics import GzipTcp, PlainTcp, PlainUdp, ProtocolError
 from asyncmetrics.protocols.protocol import Protocol
 
 
@@ -114,8 +115,8 @@ async def test_send_failed():
         await protocol.send([('test_send', 1, 1)])
         protocol.close()
 
-        with raises(ProtocolError):
-            await protocol.send([('test_send', 1, 1)])
+    with raises(ProtocolError):
+        await protocol.send([('test_send', 1, 1)])
 
 
 @mark.asyncio
@@ -144,3 +145,17 @@ async def test_send_udp():
         protocol.close()
 
     assert sent == [b'test_send_udp 1 1\n']
+
+
+@mark.parametrize('datatset,data', [
+    (
+        [('one', 1, 1)],
+        b'one 1 1\n'
+    ),
+    (
+        [('two', 2, 2), ('two', 3, 3)],
+        b'two 2 2\ntwo 3 3\n'
+    ),
+])
+def test_gzip(datatset, data):
+    assert decompress(GzipTcp()._encode(datatset)) == data

@@ -14,13 +14,15 @@ logger = getLogger(__package__)
 
 
 class Graphite:
-    def __init__(self, protocol: Protocol = PlainTcp(), *, queue_size: int = 1000000, flush_interval: float = 1.):
+    def __init__(self, protocol: Protocol = PlainTcp(), *,
+                 queue_size: int = 1000000, flush_interval: float = 1., fail_wait: float = 60.):
         self._protocol = protocol
         self._queue = Queue()
         self._sender_task = ensure_future(self._sender())
         self._running = True
         self._queue_size = queue_size
         self._flush_interval = flush_interval
+        self._fail_wait = fail_wait
 
     async def _sender(self):
         protocol = self._protocol
@@ -33,9 +35,8 @@ class Graphite:
 
             try:
                 if send_failed:
-                    # TODO Make seconds configurable
-                    logger.debug("Sleeping for 60 seconds")
-                    await sleep(60)
+                    logger.debug("Sleeping for %s seconds", self._fail_wait)
+                    await sleep(self._fail_wait)
                 else:
                     await sleep(self._flush_interval)
 

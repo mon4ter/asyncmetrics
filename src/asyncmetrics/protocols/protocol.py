@@ -22,11 +22,13 @@ class Protocol:
             data = self._encode(dataset)
             await self._write(data)
         except Exception as exc:
+            self.close()
             raise ProtocolError(*exc.args) from exc
 
     def close(self):
         if self._writer:
             self._writer.close()
+            self._writer = None
 
     async def _connect(self) -> StreamWriter:
         raise NotImplementedError
