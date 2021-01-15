@@ -11,7 +11,7 @@ with open('README.md') as fh:
 setup(
     name='asyncmetrics',
     version=version,
-    packages=['asyncmetrics'],
+    packages=['asyncmetrics', 'asyncmetrics.protocols'],
     package_dir={'': 'src'},
     url='https://github.com/mon4ter/asyncmetrics',
     license='MIT',
@@ -30,9 +30,7 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
     ],
-    install_requires=[
-        'aiographite',
-    ],
+    install_requires=[],
     setup_requires=[
         'pytest-runner',
     ],

@@ -3,7 +3,8 @@ from logging import getLogger
 from time import time
 from typing import Optional
 
-from aiographite.aiographite import AIOGraphite, AioGraphiteSendException, connect
+from .protocols import PlainTcp, ProtocolError
+from .protocols.protocol import Protocol
 
 __all__ = [
     'Graphite',
@@ -13,21 +14,16 @@ logger = getLogger(__package__)
 
 
 class Graphite:
-    def __init__(self, host: str = '127.0.0.1', *args, queue_size: int = 1000000, flush_interval: float = 1., **kwargs):
-        self._conn = None
-        self._connect_args = (host, *args), kwargs
+    def __init__(self, protocol: Protocol = PlainTcp(), *, queue_size: int = 1000000, flush_interval: float = 1.):
+        self._protocol = protocol
         self._queue = Queue()
         self._sender_task = ensure_future(self._sender())
         self._running = True
         self._queue_size = queue_size
         self._flush_interval = flush_interval
 
-    async def _connect(self) -> AIOGraphite:
-        args, kwargs = self._connect_args
-        return await connect(*args, **kwargs)
-
     async def _sender(self):
-        conn = self._conn = await self._connect()
+        protocol = self._protocol
         queue = self._queue
         flushing = False
         send_failed = False
@@ -59,17 +55,17 @@ class Graphite:
                 metrics = metrics[-self._queue_size:]
 
             try:
-                await shield(conn.send_multiple(metrics))
-            except AioGraphiteSendException as exc:
+                await shield(protocol.send(metrics))
+            except CancelledError:
+                self._running = False
+                flushing = True
+            except ProtocolError as exc:
                 logger.error("%s", exc)
 
                 for metric in metrics:
                     queue.put_nowait(metric)
 
                 send_failed = True
-            except CancelledError:
-                self._running = False
-                flushing = True
             else:
                 if metrics_len:
                     logger.debug("Sent %s metrics", metrics_len)
@@ -87,8 +83,7 @@ class Graphite:
         except Exception as exc:
             logger.error("Error at %s sender task: %s", self.__class__.__name__, exc, exc_info=exc)
 
-        if self._conn:
-            await self._conn.close()
+        self._protocol.close()
 
     def send(self, metric: str, value: int, timestamp: Optional[int] = None):
         if not self._running:
