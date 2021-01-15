@@ -1,9 +1,10 @@
-from asyncio import StreamReader, sleep, start_server
+from asyncio import DatagramProtocol, StreamReader, get_event_loop, sleep, start_server
+from random import randint
 from typing import Tuple
 
 from pytest import mark, raises
 
-from asyncmetrics import PlainTcp, ProtocolError
+from asyncmetrics import PlainTcp, PlainUdp, ProtocolError
 from asyncmetrics.protocols.protocol import Protocol
 
 
@@ -22,6 +23,34 @@ class TcpServer:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         self._server.close()
         await self._server.wait_closed()
+
+
+class SentDatagramProtocol(DatagramProtocol):
+    def __init__(self, sent: list):
+        self._sent = sent
+
+    def __call__(self):
+        return type(self)(self._sent)
+
+    def datagram_received(self, data: bytes, addr):
+        self._sent.append(data)
+
+
+class UdpServer:
+    def __init__(self, sent: list):
+        self._sent = sent
+        self._transport = None
+
+    async def __aenter__(self) -> Tuple[str, int]:
+        address = '127.0.0.1', randint(1024, 65535)
+        self._transport, _ = await get_event_loop().create_datagram_endpoint(
+            SentDatagramProtocol(self._sent),
+            local_addr=address,
+        )
+        return address
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self._transport.close()
 
 
 @mark.parametrize('datatset,data', [
@@ -66,16 +95,16 @@ def test_protocol_encode_abc():
 
 
 @mark.asyncio
-async def test_send():
+async def test_send_tcp():
     sent = []
 
     async with TcpServer(sent) as (host, port):
         protocol = PlainTcp(host, port)
-        await protocol.send([('test_send', 1, 1)])
+        await protocol.send([('test_send_tcp', 1, 1)])
         await sleep(.001)
         protocol.close()
 
-    assert sent == [b'test_send 1 1\n']
+    assert sent == [b'test_send_tcp 1 1\n']
 
 
 @mark.asyncio
@@ -87,3 +116,31 @@ async def test_send_failed():
 
         with raises(ProtocolError):
             await protocol.send([('test_send', 1, 1)])
+
+
+@mark.asyncio
+async def test_udp():
+    sent = []
+
+    async with UdpServer(sent) as (host, port):
+        writer = await PlainUdp(host, port)._connect()
+
+        writer.write(b'test_udp\n')
+        await sleep(.001)
+
+        writer.close()
+
+    assert sent == [b'test_udp\n']
+
+
+@mark.asyncio
+async def test_send_udp():
+    sent = []
+
+    async with UdpServer(sent) as (host, port):
+        protocol = PlainUdp(host, port)
+        await protocol.send([('test_send_udp', 1, 1)])
+        await sleep(.001)
+        protocol.close()
+
+    assert sent == [b'test_send_udp 1 1\n']

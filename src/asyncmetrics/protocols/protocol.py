@@ -20,8 +20,7 @@ class Protocol:
                 self._writer = await self._connect()
 
             data = self._encode(dataset)
-            self._writer.write(data)
-            await self._writer.drain()
+            await self._write(data)
         except Exception as exc:
             raise ProtocolError(*exc.args) from exc
 
@@ -31,6 +30,9 @@ class Protocol:
 
     async def _connect(self) -> StreamWriter:
         raise NotImplementedError
+
+    async def _write(self, data: bytes):
+        self._writer.write(data)
 
     def _encode(self, dataset: Iterable[Tuple[str, int, int]]) -> bytes:
         raise NotImplementedError
