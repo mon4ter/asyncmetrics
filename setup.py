@@ -19,7 +19,7 @@ setup(
     author_email='mon4ter@gmail.com',
     description='Send metrics to Graphite asynchronously from your asyncio application',
     long_description=long_description,
-    long_description_content_type="text/markdown",
+    long_description_content_type='text/markdown',
     classifiers=[
         'Development Status :: 4 - Beta',
         'Programming Language :: Python :: 3.5',

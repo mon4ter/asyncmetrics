@@ -14,3 +14,12 @@ script:
   - python setup.py test
 after_success:
   - codecov
+deploy:
+  provider: pypi
+  user: '__token__'
+  password:
+    secure: 'JxuIPpCb7qiPmH4L4q/orqKigwCWNkZhfemg/QpYb239NidIfcwIj71OQyYBrzgcif2fam5dwyy0LhvlscQfV+uYZq6iKqBfZuzuUuxtBoNmf6vRKvfdhY2dW6eLI2iR8R/+YtRISC/NALq61J5UIYaGDErRZq/V5Q/kzrplCCzTPyGLEmaBbZCeIX+gF3jj4FRvZs7XgspkS+TlOxEzR+3W0fLrdxhKkECU2VasWhX/I7MiR9bUrSSec8g9H+ahbNJWeEpLWxOFwbjnJpRWg1ayXsiz0WvYf7qb6Fz2C4GVO+OYuY+t7FTBg8zNxDrMRaXo6ardYMnHRl0z3i0IXxJxosEYTXKglDO/70RHJjp/v/9nGXeHX6UIL/A8tJeHvvE2hZ6OezF1k2WvzQDVU6Xk6zOIT7fCt0+wN72w9xkDTGkbR0dLSKH7PDolU9q16W08jN+sQfG9aVWgTTro3/xJU5wxdAIdHaAwKVrr9VJW8y6syzWTW7iIX0BN454NBOvuwM8e8rJ4cftT10hlD4s+H80lDOzGTjZLcvtFjBxcXVS7i4bOycaP0rETjO5RHMa5Ol0nvTMDWmzxx+ZgqNX8PTLa2TSr0DDNaLENr0xwBwWql4BLea8NWc+zYbJ43Mt20KeL222W5jwA3cKrGzFbW5r65ZSVP3n68Keb2w4='
+  on:
+    tags: true
+  distributions: 'sdist bdist_wheel'
+  skip_existing: true
